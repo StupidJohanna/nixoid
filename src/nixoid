@@ -6,6 +6,7 @@ import platform
 import sys
 from git import Repo
 import typing as t
+import shutil
 
 
 def prompt(question):
@@ -26,17 +27,23 @@ def prompt(question):
 def n_init():
     if not os.path.exists(os.path.normpath(os.path.expanduser("~/.nixoid"))):
         os.mkdir(os.path.normpath(os.path.expanduser("~/.nixoid")))
-        os.chdir(os.path.normpath(os.path.expanduser("~/.nixoid")))
-        os.mkdir("tmp")
+    os.chdir(os.path.normpath(os.path.expanduser("~/.nixoid")))
+
+    if os.path.exists("tmp"):
+        shutil.rmtree("tmp")
+    os.mkdir("tmp")
 
 
 def download(index, *args, **kwargs):
     n_init()
-    Repo.clone_from(
+    r = Repo.clone_from(
         f"https://github.com/{index}",
         os.path.normpath(os.path.expanduser("~/.nixoid/tmp")),
     )
+    os.chdir("tmp")
+
     install(*args, **kwargs)
+    os.chdir("..")
 
 
 def run_script(script):
@@ -108,19 +115,23 @@ import typer
 app = typer.Typer()
 
 
-@app.command()
-def install(
+@app.command(name="install")
+def cmd_install(
     target: t.Annotated[str, typer.Argument(...)],
-    simul_platform=typer.Option(
+    simul_platform: str = typer.Option(
         f"{sys.platform}-{platform.machine()}", "--simul-platform", "-sp"
     ),
 ):
+    if isinstance(simul_platform, typer.models.OptionInfo):
+        simul_platform = simul_platform.default
+    print(simul_platform)
+    print(target)
     if simul_platform != f"{sys.platform}-{platform.machine()}":
         if not prompt(
-            "You have supplied a Platform that is NOT native to your computer. Continuing could result in broken Packages. Continue Anyways? [y/n]"
+            f"You have supplied a Platform ({simul_platform}) that is NOT native to your computer ({sys.platform}-{platform.machine()}). Continuing could result in broken Packages. Continue Anyways? [y/n]"
         ):
             return
-    download(target, target=simul_platform)
+    download(target, target=str(simul_platform))
 
 
 @app.command()
