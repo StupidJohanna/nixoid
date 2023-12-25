@@ -34,16 +34,25 @@ def n_init():
     os.mkdir("tmp")
 
 
-def download(index, *args, **kwargs):
+def download(index, is_submodule=False, *args, **kwargs):
     n_init()
-    r = Repo.clone_from(
-        f"https://github.com/{index}",
-        os.path.normpath(os.path.expanduser("~/.nixoid/tmp")),
-    )
-    os.chdir("tmp")
+    if not is_submodule:
+        r = Repo.clone_from(
+            f"https://github.com/{index}",
+            os.path.normpath(os.path.expanduser("~/.nixoid/tmp")),
+        )
+        os.chdir("tmp")
+    else:
+        r = Repo.clone_from(
+            f"https://github.com/{index}",
+            os.path.normpath(
+                os.path.expanduser(f"~/.nixoid/tmp/{index.replace('/', '-')}")
+            ),
+        )
+        os.chdir(f"tmp/{index.replace('/', '-')}")
 
     install(*args, **kwargs)
-    os.chdir("..")
+    os.chdir("../" * int(is_submodule) + 1)
 
 
 def run_script(script):
@@ -74,11 +83,12 @@ def run_script(script):
 
 
 def install(target=f"{sys.platform}-{platform.machine()}"):
+    print(os.getcwd())
     spec = yaml.safe_load(open("package.spec"))
     print(f"Installing {spec['owner']}/{spec['name']}...")
     print(f"Installing Build Dependencies...")
     for dp in spec["package"].get("dependencies", []):
-        download(dp)
+        download(dp, is_submodule=True)
     for esu in spec["package"].get("extra-script-urls", []):
         print(f"Downloading Extra Script {esu}...", end="\r")
         r = requests.get(esu)
