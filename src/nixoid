@@ -52,7 +52,7 @@ def download(index, is_submodule=False, *args, **kwargs):
         os.chdir(f"tmp/{index.replace('/', '-')}")
 
     install(*args, **kwargs)
-    os.chdir("../" * int(is_submodule) + 1)
+    os.chdir("../" * (int(is_submodule) + 1))
 
 
 def run_script(script):
