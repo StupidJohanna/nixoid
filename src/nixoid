@@ -1,0 +1,132 @@
+#!/usr/bin/env python3
+import yaml
+import requests
+import os
+import platform
+import sys
+from git import Repo
+import typing as t
+
+
+def prompt(question):
+    user_input = ""
+
+    while True:
+        user_input = input(question)
+
+        if user_input.lower() in ["yes", "y"]:
+            return True
+            continue
+        elif user_input.lower() in ["no", "n"]:
+            return False
+        else:
+            print("Type yes/no")
+
+
+def n_init():
+    if not os.path.exists(os.path.normpath(os.path.expanduser("~/.nixoid"))):
+        os.mkdir(os.path.normpath(os.path.expanduser("~/.nixoid")))
+        os.chdir(os.path.normpath(os.path.expanduser("~/.nixoid")))
+        os.mkdir("tmp")
+
+
+def download(index, *args, **kwargs):
+    n_init()
+    Repo.clone_from(
+        f"https://github.com/{index}",
+        os.path.normpath(os.path.expanduser("~/.nixoid/tmp")),
+    )
+    install(*args, **kwargs)
+
+
+def run_script(script):
+    if prompt("Do you want to read the script before execution? [y/n]"):
+        (yaml.safe_dump(script, sys.stdout))
+        print()
+        if not prompt("Ok? [y/n]"):
+            print("Aborted.")
+            exit()
+    before = script.get("before_script", [])
+    for i in before:
+        os.system(i)
+
+    entrance = script["nixoid-entrance"]
+    for com in entrance.get("run", []):
+        os.system(com)
+    for stage_query in entrance.get("stages", []):
+        print(f"Running Install Stage {stage_query}")
+        stage = script[stage_query]
+        for subscript in stage.get("before", []):
+            run_script(yaml.safe_load(open(f"scripts/{subscript}.yml")))
+        for cmd in stage.get("run", []):
+            os.system(cmd)
+
+    after = script.get("after_script", [])
+    for i in after:
+        os.system(i)
+
+
+def install(target=f"{sys.platform}-{platform.machine()}"):
+    spec = yaml.safe_load(open("package.spec"))
+    print(f"Installing {spec['owner']}/{spec['name']}...")
+    print(f"Installing Build Dependencies...")
+    for dp in spec["package"].get("dependencies", []):
+        download(dp)
+    for esu in spec["package"].get("extra-script-urls", []):
+        print(f"Downloading Extra Script {esu}...", end="\r")
+        r = requests.get(esu)
+        import re
+
+        d = r.headers["content-disposition"]
+        fname = re.findall("filename=(.+)", d)[0]
+        with open(f"scripts/{fname}", "w+") as f:
+            f.write(r.text)
+    print()
+    for esu in spec["package"].get("extra-index-urls", []):
+        print(f"Downloading Extra Index URL {esu}...", end="\r")
+        r = requests.get(esu)
+        import re
+
+        d = r.headers.get("content-disposition") or "filename=extra"
+        fname = re.findall("filename=(.+)", d)[0]
+        with open(f"src/extra/{fname}", "wb+") as f:
+            f.write(r.content)
+
+    script = spec["package"]["build"].get(target)
+    if not script:
+        return print(
+            f"FATAL - {spec['owner']}/{spec['name']} does not support your device ({target})"
+        )
+    else:
+        run_script(yaml.safe_load(open(f"scripts/{script}.yml")))
+        print(f"{script} has been successfully installed!")
+        print(f'{spec["name"]} was installed successfully!')
+
+
+import typer
+
+app = typer.Typer()
+
+
+@app.command()
+def install(
+    target: t.Annotated[str, typer.Argument(...)],
+    simul_platform=typer.Option(
+        f"{sys.platform}-{platform.machine()}", "--simul-platform", "-sp"
+    ),
+):
+    if simul_platform != f"{sys.platform}-{platform.machine()}":
+        if not prompt(
+            "You have supplied a Platform that is NOT native to your computer. Continuing could result in broken Packages. Continue Anyways? [y/n]"
+        ):
+            return
+    download(target, target=simul_platform)
+
+
+@app.command()
+def run(script):
+    run_script(yaml.safe_load(open(f"scripts/{script}.yml")))
+
+
+if __name__ == "__main__":
+    app()

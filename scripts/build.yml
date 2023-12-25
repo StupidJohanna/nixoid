@@ -1,0 +1,12 @@
+before_script:
+  - pip install requests pyyaml
+
+nixoid-entrance:
+  stages:
+    - install
+
+
+install:
+  run:
+    - sudo mv src/nixoid /bin/nixoid
+    - sudo chmod 777 /bin/nixoid
