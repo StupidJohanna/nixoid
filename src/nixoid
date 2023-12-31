@@ -8,6 +8,8 @@ from git import Repo
 import typing as t
 import shutil
 
+istack = []
+
 
 def prompt(question):
     user_input = ""
@@ -24,32 +26,43 @@ def prompt(question):
             print("Type yes/no")
 
 
-def n_init():
+def n_init(cd=True, mkdir=True):
     if not os.path.exists(os.path.normpath(os.path.expanduser("~/.nixoid"))):
         os.mkdir(os.path.normpath(os.path.expanduser("~/.nixoid")))
-    os.chdir(os.path.normpath(os.path.expanduser("~/.nixoid")))
+    if cd:
+        os.chdir(os.path.normpath(os.path.expanduser("~/.nixoid")))
 
-    if os.path.exists("tmp"):
-        shutil.rmtree("tmp")
-    os.mkdir("tmp")
+    if os.path.exists(
+        os.path.join(os.path.normpath(os.path.expanduser("~/.nixoid")), "tmp")
+    ):
+        shutil.rmtree(
+            os.path.join(os.path.normpath(os.path.expanduser("~/.nixoid")), "tmp")
+        )
+    if mkdir:
+        os.mkdir(os.path.join(os.path.normpath(os.path.expanduser("~/.nixoid")), "tmp"))
 
 
 def download(index, is_submodule=False, *args, **kwargs):
-    n_init()
     if not is_submodule:
+        n_init()
         r = Repo.clone_from(
             f"https://github.com/{index}",
             os.path.normpath(os.path.expanduser("~/.nixoid/tmp")),
         )
         os.chdir("tmp")
     else:
+        os.chdir(os.path.normpath(os.path.expanduser("~/.nixoid/tmp")))
+        os.mkdir("submodules")
+        os.mkdir(f"submodules/{index.replace('/', '-')}")
         r = Repo.clone_from(
             f"https://github.com/{index}",
             os.path.normpath(
-                os.path.expanduser(f"~/.nixoid/tmp/{index.replace('/', '-')}")
+                os.path.expanduser(
+                    f"~/.nixoid/tmp/submodules/{index.replace('/', '-')}"
+                )
             ),
         )
-        os.chdir(f"tmp/{index.replace('/', '-')}")
+        os.chdir(f"submodules/{index.replace('/', '-')}")
 
     install(*args, **kwargs)
     os.chdir("../")
@@ -117,6 +130,8 @@ def install(target=f"{sys.platform}-{platform.machine()}"):
             f"FATAL - {spec['owner']}/{spec['name']} does not support your device ({target})"
         )
     else:
+        print(os.getcwd())
+        print(os.listdir())
         run_script(yaml.safe_load(open(f"scripts/{script}.yml")))
         print(f"{script} has been successfully installed!")
         print(f'{spec["name"]} was installed successfully!')
@@ -143,7 +158,16 @@ def cmd_install(
             f"You have supplied a Platform ({simul_platform}) that is NOT native to your computer ({sys.platform}-{platform.machine()}). Continuing could result in broken Packages. Continue Anyways? [y/n]"
         ):
             return
-    download(target, target=str(simul_platform))
+    if os.path.exists(target):
+        n_init(False, False)
+        shutil.copytree(
+            target,
+            os.path.normpath(os.path.expanduser("~/.nixoid/tmp")),
+        )
+        os.chdir(os.path.normpath(os.path.expanduser("~/.nixoid/tmp")))
+        install(simul_platform)
+    else:
+        download(target, target=str(simul_platform))
 
 
 @app.command()
